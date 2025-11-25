@@ -15,7 +15,8 @@ Features
 
 How to Use
 	1.	Open the website:
-https://nishaaaaal.github.io/daily-schedule/
+	https://nishaaaaal.github.io/daily_schedule/
+
 	2.	Or open the file locally by double-clicking index.html.
 
 File Info
