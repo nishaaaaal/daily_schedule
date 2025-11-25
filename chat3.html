@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Structured Interactive Schedule</title>
+<style>
+  :root{
+    --accent:#2563eb; --muted:#6b7280; --card:#fff;
+    --radius:10px; --shadow: 0 6px 20px rgba(17,24,39,0.06);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  }
+  body{ margin:18px; background: linear-gradient(180deg,#f4f6fb,#f8fafc); color:#0f172a; -webkit-font-smoothing:antialiased; }
+  .app{ max-width:980px; margin:0 auto; }
+  header{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+  h1{ font-size:36px; margin:0; font-weight:800; }
+  .countdown-banner{ font-weight:800; font-size:16px; margin-top:6px; }
+  .controls{ display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  button.btn{ background:var(--card); border:1px solid #e6edf6; padding:8px 12px; border-radius:8px; cursor:pointer; box-shadow:var(--shadow); font-weight:700; }
+  button.primary{ background:linear-gradient(90deg,var(--accent),#1d4ed8); color:#fff; border:none; }
+  .card{ background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .tabs{ display:flex; border-bottom:1px solid #e6edf6; background:linear-gradient(180deg,#fff,#fbfdff); }
+  .tabs [role="tab"]{ flex:1; padding:12px; text-align:center; cursor:pointer; border:none; font-weight:800; color:var(--muted); }
+  .tabs [role="tab"][aria-selected="true"]{ border-bottom:3px solid var(--accent); color:#0f172a; background:linear-gradient(180deg,#fff,#f7fbff); }
+  .tabpanel{ padding:18px; display:none; }
+  .tabpanel.active{ display:block; }
+  .session-header{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  .session-title{ display:flex; gap:10px; align-items:center; }
+  .meta{ color:var(--muted); font-size:13px; }
+  .schedule{ display:grid; gap:10px; }
+  .item{ border-radius:10px; padding:12px; display:flex; gap:12px; align-items:flex-start; background:linear-gradient(180deg,#fff,#fbfdff); border:1px solid #eef2ff; position:relative;}
+  .time{ min-width:140px; font-weight:800; color:#111827; font-size:14px; cursor:pointer; user-select:none; }
+  .body{ flex:1; }
+  .title{ font-weight:900; margin-bottom:6px; font-size:15px; }
+  .duration{ color:var(--muted); font-size:13px; }
+  .progressbar{ height:8px; background:#eef2ff; border-radius:999px; overflow:hidden; margin-top:8px; }
+  .progressbar>i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--accent),#7c3aed); transition: width .3s linear; }
+  .current{ outline:2px solid rgba(37,99,235,0.12); }
+  .detail{ margin-top:8px; color:var(--muted); font-size:13px; display:none; }
+  .item.open .detail{ display:block; }
+  .small{ font-size:12px; padding:6px 8px; border-radius:8px; border:none; cursor:pointer; background:#f8fafc; }
+  .summary-row{ display:flex; gap:14px; align-items:center; justify-content:flex-end; margin-top:12px; color:var(--muted); font-size:13px; }
+  .pill{ background:#f8fafc; padding:8px 10px; border-radius:999px; border:1px solid #eef2ff; }
+  .controls-right{ display:flex; gap:8px; align-items:center; }
+  /* inline editor popup */
+  .editor-popup{ position:absolute; z-index:60; background:#fff; border:1px solid #e6edf6; box-shadow:var(--shadow); padding:10px; border-radius:8px; min-width:260px;}
+  .editor-popup input{ padding:8px; border-radius:6px; border:1px solid #e6edf6; width:100%; margin-bottom:8px; box-sizing:border-box; }
+  .toggles{ display:flex; gap:8px; align-items:center; }
+  .muted{ color:var(--muted); font-size:13px; }
+  @media (max-width:640px){ .time{ min-width:100px } .editor-popup{ min-width:220px } }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Structured Interactive Schedule</h1>
+        <div class="countdown-banner"><strong>Dec 31 make it counts ⚡️</strong></div>
+      </div>
+
+      <div class="controls" role="group" aria-label="Schedule controls">
+        <button class="btn" id="expandAll">Expand all</button>
+        <button class="btn" id="collapseAll">Collapse all</button>
+        <button class="btn primary" id="nowBtn" title="Jump to current session">Jump to now</button>
+
+        <div class="controls-right">
+          <div style="display:flex;gap:8px;align-items:center">
+            <label class="muted" for="showRemainingToggle">Show remaining</label>
+            <input id="showRemainingToggle" type="checkbox" checked />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label class="muted" for="notifyToggle">Notifications</label>
+            <input id="notifyToggle" type="checkbox" />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label class="muted" for="soundToggle">Sound</label>
+            <input id="soundToggle" type="checkbox" checked />
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="card" aria-label="Schedule card">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-target="morning">Morning</button>
+        <button role="tab" aria-selected="false" data-target="afternoon">Afternoon</button>
+        <button role="tab" aria-selected="false" data-target="evening">Evening</button>
+      </div>
+
+      <!-- MORNING -->
+      <div id="morning" class="tabpanel active">
+        <div class="session-header">
+          <div class="session-title">
+            <div class="dot" style="width:12px;height:12px;border-radius:50%;background:#10b981"></div>
+            <div><div style="font-weight:900">Morning — Deep Technical Dive</div><div class="meta">Focused practice</div></div>
+          </div>
+          <div class="session-info"><div class="meta">Session remaining:</div><div class="session-remaining" id="morningRemaining">—</div></div>
+        </div>
+
+        <div class="schedule" id="morningList">
+          <div class="item" data-id="m1" data-start="08:30 AM" data-end="08:45 AM" data-type="start">
+            <div class="time" title="Double-click to edit times">08:30 AM – 08:45 AM</div>
+            <div class="body">
+              <div class="title">🥣 Breakfast / Start</div>
+              <div class="duration">Duration: 15 mins</div>
+              <div class="progressbar" aria-hidden="true"><i></i></div>
+              <div class="detail">Light breakfast, set up environment, quick review of goals.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="m2" data-start="08:45 AM" data-end="11:00 AM" data-type="workout">
+            <div class="time" title="Double-click to edit times">08:45 AM – 11:00 AM</div>
+            <div class="body">
+              <div class="title">🏋️‍♂️ Technical Workouts (Part 1)</div>
+              <div class="duration">Duration: 2 hr 15 mins</div>
+              <div class="progressbar" aria-hidden="true"><i></i></div>
+              <div class="detail">Deep practice: systems, algorithms, problem breakdowns.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="m3" data-start="11:00 AM" data-end="11:15 AM" data-type="break">
+            <div class="time" title="Double-click to edit times">11:00 AM – 11:15 AM</div>
+            <div class="body">
+              <div class="title">☕ Morning Tea Break</div>
+              <div class="duration">Duration: 15 mins</div>
+              <div class="progressbar" aria-hidden="true"><i></i></div>
+              <div class="detail">Short reset: walk/stretch, hydrate.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="m4" data-start="11:15 AM" data-end="01:00 PM" data-type="workout">
+            <div class="time" title="Double-click to edit times">11:15 AM – 01:00 PM</div>
+            <div class="body">
+              <div class="title">🏋️‍♂️ Technical Workouts (Part 2)</div>
+              <div class="duration">Duration: 1 hr 45 mins</div>
+              <div class="progressbar" aria-hidden="true"><i></i></div>
+              <div class="detail">Continue targeted practice and problem solving.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AFTERNOON -->
+      <div id="afternoon" class="tabpanel">
+        <div class="session-header">
+          <div class="session-title">
+            <div class="dot" style="width:12px;height:12px;border-radius:50%;background:#f59e0b"></div>
+            <div><div style="font-weight:900">Afternoon — Communication & Projects</div><div class="meta">Collaboration & project work</div></div>
+          </div>
+          <div class="session-info"><div class="meta">Session remaining:</div><div class="session-remaining" id="afternoonRemaining">—</div></div>
+        </div>
+
+        <div class="schedule" id="afternoonList">
+          <div class="item" data-id="a1" data-start="01:00 PM" data-end="02:00 PM" data-type="lunch">
+            <div class="time">01:00 PM – 02:00 PM</div>
+            <div class="body">
+              <div class="title">🍛 Lunch Break</div>
+              <div class="duration">Duration: 1 hr</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Take a full break, step away from the screen.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="a2" data-start="02:00 PM" data-end="03:00 PM" data-type="call">
+            <div class="time">02:00 PM – 03:00 PM</div>
+            <div class="body">
+              <div class="title">🗣️ Communication Session (Fixed)</div>
+              <div class="duration">Duration: 1 hr</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Meetings and updates.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="a3" data-start="03:00 PM" data-end="05:00 PM" data-type="project">
+            <div class="time">03:00 PM – 05:00 PM</div>
+            <div class="body">
+              <div class="title">💻 Project & Data Analytics Revision</div>
+              <div class="duration">Duration: 2 hr</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Hands-on project work and analytics.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EVENING -->
+      <div id="evening" class="tabpanel">
+        <div class="session-header">
+          <div class="session-title">
+            <div class="dot" style="width:12px;height:12px;border-radius:50%;background:#7c3aed"></div>
+            <div><div style="font-weight:900">Evening — Skills, Logic & Review</div><div class="meta">Practice & review</div></div>
+          </div>
+          <div class="session-info"><div class="meta">Session remaining:</div><div class="session-remaining" id="eveningRemaining">—</div></div>
+        </div>
+
+        <div class="schedule" id="eveningList">
+          <div class="item" data-id="e1" data-start="05:00 PM" data-end="05:15 PM" data-type="break">
+            <div class="time">05:00 PM – 05:15 PM</div>
+            <div class="body">
+              <div class="title">☕ Evening Tea Break</div>
+              <div class="duration">Duration: 15 mins</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Quick reset.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="e2" data-start="05:15 PM" data-end="07:00 PM" data-type="workout">
+            <div class="time">05:15 PM – 07:00 PM</div>
+            <div class="body">
+              <div class="title">🏋️‍♂️ Technical Workouts (Part 3)</div>
+              <div class="duration">Duration: 1 hr 45 mins</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Focused problem-solving, practice rounds.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="e3" data-start="07:00 PM" data-end="08:00 PM" data-type="practice">
+            <div class="time">07:00 PM – 08:00 PM</div>
+            <div class="body">
+              <div class="title">🐍 Python, DSA & LeetCode</div>
+              <div class="duration">Duration: 1 hr</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Targeted coding practice.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="e4" data-start="08:00 PM" data-end="08:30 PM" data-type="misc">
+            <div class="time">08:00 PM – 08:30 PM</div>
+            <div class="body">
+              <div class="title">🤖 Miscellaneous</div>
+              <div class="duration">Duration: 30 mins</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Small admin tasks.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="e5" data-start="08:30 PM" data-end="09:15 PM" data-type="skill">
+            <div class="time">08:30 PM – 09:15 PM</div>
+            <div class="body">
+              <div class="title">📊 Extra Skills (Excel/Tools)</div>
+              <div class="duration">Duration: 45 mins</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Tool practice and short projects.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+
+          <div class="item" data-id="e6" data-start="09:15 PM" data-end="10:00 PM" data-type="revision">
+            <div class="time">09:15 PM – 10:00 PM</div>
+            <div class="body">
+              <div class="title">🔄 Dedicated Revision (Week 1 - Week 25)</div>
+              <div class="duration">Duration: 45 mins</div>
+              <div class="progressbar"><i></i></div>
+              <div class="detail">Spaced repetition & review.</div>
+            </div>
+            <div class="actions"><button class="small">Toggle</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:14px; display:flex; justify-content:space-between; align-items:center">
+        <div></div>
+        <div class="summary-row"><div class="pill" id="totalDay">Day total: —</div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- editor popup (hidden by default) -->
+  <div id="editor" class="editor-popup" style="display:none" role="dialog" aria-modal="true">
+    <div style="font-weight:800;margin-bottom:6px">Edit times (12-hour)</div>
+    <input id="startInput" placeholder="e.g. 08:30 AM" autocomplete="off"/>
+    <input id="endInput" placeholder="e.g. 09:15 AM" autocomplete="off"/>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" id="cancelEdit">Cancel</button>
+      <button class="btn primary" id="saveEdit">Save</button>
+    </div>
+    <div id="editorError" class="muted" style="margin-top:8px;display:none;color:#dc2626"></div>
+  </div>
+
+<script>
+/* ---------------- utilities ---------------- */
+function parseTimeToDate12(str){
+  // accepts "08:30 AM" (12-hr). Returns Date object for today.
+  const parts = (str||'').trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if(!parts) return null;
+  let hh = parseInt(parts[1],10), mm = parseInt(parts[2],10), ap = parts[3].toUpperCase();
+  if(ap === 'AM'){ if(hh === 12) hh = 0; } else { if(hh !== 12) hh += 12; }
+  const d = new Date(); d.setHours(hh, mm, 0, 0); d.setSeconds(0); d.setMilliseconds(0);
+  return d;
+}
+function formatDateTo12(d){
+  // returns "08:30 AM"
+  const hh24 = d.getHours();
+  const mm = d.getMinutes();
+  const ap = hh24 >= 12 ? 'PM' : 'AM';
+  let hh = hh24 % 12; if(hh === 0) hh = 12;
+  return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} ${ap}`;
+}
+function validate12(str){
+  return (/^(0?\d|1[0-2]):[0-5]\d\s?(AM|PM)$/i).test((str||'').trim());
+}
+function formatHMS(totalSeconds){
+  if(totalSeconds < 0) totalSeconds = 0;
+  const h = Math.floor(totalSeconds/3600), m = Math.floor((totalSeconds%3600)/60), s = Math.floor(totalSeconds%60);
+  if(h>0) return `${h}h ${m}m ${s}s`;
+  if(m>0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+/* ---------------- persistence ---------------- */
+const STORAGE_KEY = 'structured_schedule_v1';
+function saveSchedule(){
+  const items = Array.from(document.querySelectorAll('.item')).map(it=>{
+    return { id: it.dataset.id, start: it.dataset.start, end: it.dataset.end };
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+function loadSchedule(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return;
+  try{
+    const arr = JSON.parse(raw);
+    arr.forEach(obj=>{
+      const el = document.querySelector(`.item[data-id="${obj.id}"]`);
+      if(el && obj.start && obj.end){
+        el.dataset.start = obj.start;
+        el.dataset.end = obj.end;
+        const timeEl = el.querySelector('.time');
+        if(timeEl) timeEl.textContent = `${obj.start} – ${obj.end}`;
+      }
+    });
+  }catch(e){ console.warn('loadSchedule err', e); }
+}
+
+/* ---------------- inline editor ---------------- */
+const editor = document.getElementById('editor');
+const startInput = document.getElementById('startInput');
+const endInput = document.getElementById('endInput');
+const saveEdit = document.getElementById('saveEdit');
+const cancelEdit = document.getElementById('cancelEdit');
+const editorError = document.getElementById('editorError');
+let editingItem = null;
+
+function openEditorForItem(item){
+  editingItem = item;
+  startInput.value = item.dataset.start || '';
+  endInput.value = item.dataset.end || '';
+  editorError.style.display='none';
+  // position editor near item
+  const rect = item.getBoundingClientRect();
+  editor.style.display = 'block';
+  // basic placement: to the right unless near edge
+  const left = Math.min(window.innerWidth - 280, rect.right + 8);
+  const top = rect.top + window.scrollY;
+  editor.style.left = (left) + 'px';
+  editor.style.top = (top) + 'px';
+  startInput.focus();
+}
+function closeEditor(){ editor.style.display='none'; editingItem = null; }
+
+document.addEventListener('dblclick', (e)=>{
+  const t = e.target.closest('.time');
+  if(!t) return;
+  const item = t.closest('.item');
+  openEditorForItem(item);
+});
+
+// Save handler
+saveEdit.addEventListener('click', applyEdit);
+startInput.addEventListener('keydown', (e)=> { if(e.key==='Enter'){ applyEdit(); } if(e.key==='Escape'){ closeEditor(); }});
+endInput.addEventListener('keydown', (e)=> { if(e.key==='Enter'){ applyEdit(); } if(e.key==='Escape'){ closeEditor(); }});
+cancelEdit.addEventListener('click', closeEditor);
+
+function applyEdit(){
+  const s = startInput.value.trim().toUpperCase();
+  const e = endInput.value.trim().toUpperCase();
+  if(!validate12(s) || !validate12(e)){ editorError.style.display='block'; editorError.textContent = 'Please enter valid 12-hour times (e.g. 08:30 AM).'; return; }
+  const sd = parseTimeToDate12(s), ed = parseTimeToDate12(e);
+  if(!sd || !ed || sd >= ed){ editorError.style.display='block'; editorError.textContent = 'End must be after Start (same day).'; return; }
+  // apply to dataset and visible text
+  if(editingItem){
+    editingItem.dataset.start = s;
+    editingItem.dataset.end = e;
+    const timeEl = editingItem.querySelector('.time');
+    if(timeEl) timeEl.textContent = `${s} – ${e}`;
+    saveSchedule();
+    updateAllTimers(); // recompute immediately
+  }
+  closeEditor();
+}
+
+/* ---------------- toggles ---------------- */
+const showRemainingToggle = document.getElementById('showRemainingToggle');
+const notifyToggle = document.getElementById('notifyToggle');
+const soundToggle = document.getElementById('soundToggle');
+
+// persist toggle preferences
+const PREFS_KEY = 'structured_schedule_prefs_v1';
+function savePrefs(){ localStorage.setItem(PREFS_KEY, JSON.stringify({ showRemaining: showRemainingToggle.checked, notify: notifyToggle.checked, sound: soundToggle.checked })); }
+function loadPrefs(){
+  try{
+    const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    if(typeof p.showRemaining === 'boolean') showRemainingToggle.checked = p.showRemaining;
+    if(typeof p.notify === 'boolean') notifyToggle.checked = p.notify;
+    if(typeof p.sound === 'boolean') soundToggle.checked = p.sound;
+  }catch(e){}
+}
+showRemainingToggle.addEventListener('change', ()=>{
+  document.querySelectorAll('.remaining-txt').forEach(r=> r.style.display = showRemainingToggle.checked ? 'block' : 'none');
+  savePrefs();
+});
+notifyToggle.addEventListener('change', async ()=>{
+  if(notifyToggle.checked){
+    if("Notification" in window && Notification.permission !== 'granted'){
+      try{ const p = await Notification.requestPermission(); if(p !== 'granted') notifyToggle.checked = false; }
+      catch(e){ notifyToggle.checked = false; }
+    }
+  }
+  savePrefs();
+});
+soundToggle.addEventListener('change', savePrefs);
+loadPrefs();
+
+/* ---------------- tabs, toggles, expand/collapse (kept from previous) ---------------- */
+const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+tabs.forEach(tab=>{
+  tab.addEventListener('click', ()=> selectTab(tab));
+  tab.addEventListener('keydown',(e)=>{
+    const idx = tabs.indexOf(tab);
+    if(e.key==='ArrowRight'){ const next = tabs[(idx+1)%tabs.length]; selectTab(next); next.focus(); }
+    if(e.key==='ArrowLeft'){ const prev = tabs[(idx-1+tabs.length)%tabs.length]; selectTab(prev); prev.focus(); }
+  });
+});
+function selectTab(tab){
+  tabs.forEach(t=> t.setAttribute('aria-selected','false'));
+  tab.setAttribute('aria-selected','true');
+  document.querySelectorAll('.tabpanel').forEach(p=> p.classList.remove('active'));
+  document.getElementById(tab.dataset.target).classList.add('active');
+}
+
+document.getElementById('expandAll').addEventListener('click', ()=>{ document.querySelectorAll('.item').forEach(it=> it.classList.add('open')); });
+document.getElementById('collapseAll').addEventListener('click', ()=>{ document.querySelectorAll('.item').forEach(it=> it.classList.remove('open')); });
+document.getElementById('nowBtn').addEventListener('click', jumpToNow);
+
+function jumpToNow(){
+  const now = new Date();
+  const panels = ['morning','afternoon','evening'];
+  for(const p of panels){
+    const items = Array.from(document.querySelectorAll('#'+p+' .item'));
+    for(const it of items){
+      const s = parseTimeToDate12(it.dataset.start), e = parseTimeToDate12(it.dataset.end);
+      if(s && e && now >= s && now <= e){
+        const tabBtn = document.querySelector(`[data-target="${p}"]`);
+        if(tabBtn) selectTab(tabBtn);
+        it.classList.add('open'); it.querySelector('.small').setAttribute('aria-expanded','true'); it.querySelector('.small').textContent='Close';
+        it.scrollIntoView({behavior:'smooth', block:'center'}); return;
+      }
+    }
+  }
+  alert('No current active slot right now (based on your device clock).');
+}
+
+/* ---------------- toggles on individual buttons (open/close) ---------------- */
+document.querySelectorAll('.item .small').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const item = btn.closest('.item');
+    const isOpen = item.classList.toggle('open');
+    btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    btn.textContent = isOpen ? 'Close' : 'Toggle';
+  });
+});
+
+/* ---------------- timers, progress, session totals, notifications ---------------- */
+let prevStates = {}; // track previous 'started' state per id for notifications
+
+function updateAllTimers(){
+  const now = new Date();
+  const allItems = Array.from(document.querySelectorAll('.item'));
+  let dayTotalMins = 0;
+
+  allItems.forEach(item=>{
+    const startStr = item.dataset.start, endStr = item.dataset.end;
+    const start = parseTimeToDate12(startStr), end = parseTimeToDate12(endStr);
+    if(!start || !end) return;
+    const totalSec = Math.max(1, Math.round((end - start)/1000));
+    const elapsedSec = Math.round((now - start)/1000);
+    const remainingSec = Math.round((end - now)/1000);
+
+    // progress
+    const prog = item.querySelector('.progressbar > i');
+    if(prog){
+      let pct = 0;
+      if(now >= end) pct = 100;
+      else if(now <= start) pct = 0;
+      else pct = Math.round((elapsedSec / totalSec) * 100);
+      prog.style.width = pct + '%';
+    }
+
+    // duration text
+    const durEl = item.querySelector('.duration');
+    if(durEl){
+      const mins = Math.round(totalSec/60);
+      durEl.textContent = mins >= 60 ? `Duration: ${Math.floor(mins/60)} hr ${mins%60} mins` : `Duration: ${mins} mins`;
+    }
+
+    // per-item remaining text (simple)
+    let remainingEl = item.querySelector('.remaining-txt');
+    if(!remainingEl){
+      remainingEl = document.createElement('div');
+      remainingEl.className = 'remaining-txt';
+      remainingEl.style.fontSize = '13px';
+      remainingEl.style.color = 'var(--muted)';
+      remainingEl.style.marginTop = '6px';
+      item.querySelector('.body').appendChild(remainingEl);
+    }
+    if(now < start){
+      remainingEl.textContent = `Starts in ${formatHMS(Math.round((start - now)/1000))}`;
+    } else if(now >= start && now <= end){
+      remainingEl.textContent = `Time left: ${formatHMS(remainingSec)}`;
+    } else {
+      remainingEl.textContent = `Ended`;
+    }
+    remainingEl.style.display = showRemainingToggle.checked ? 'block' : 'none';
+
+    // highlight current
+    item.classList.remove('current');
+    const isCurrent = now >= start && now <= end;
+    if(isCurrent){
+      item.classList.add('current');
+      if(prog && prog.style.width === '0%') prog.style.width = '1%';
+    }
+
+    // notifications: detect transition from not-started to started
+    const id = item.dataset.id;
+    const wasStarted = !!prevStates[id];
+    if(!wasStarted && isCurrent){
+      // slot just started
+      if(notifyToggle.checked && ("Notification" in window) && Notification.permission === 'granted'){
+        const title = `Started: ${item.querySelector('.title').textContent}`;
+        const body = `${item.dataset.start} → ${item.dataset.end}`;
+        new Notification(title, { body });
+      }
+      if(soundToggle.checked){
+        playBeep();
+      }
+      prevStates[id] = true;
+    }
+    if(now > end){
+      prevStates[id] = false; // reset for future days/edits
+    }
+
+    dayTotalMins += Math.max(0, Math.round((end - start)/60000));
+  });
+
+  // session remaining calculation
+  ['morning','afternoon','evening'].forEach(session=>{
+    const items = Array.from(document.querySelectorAll('#'+session+' .item'));
+    let remSec = 0;
+    items.forEach(it=>{
+      const s = parseTimeToDate12(it.dataset.start), e = parseTimeToDate12(it.dataset.end);
+      if(!s || !e) return;
+      if(now < s) remSec += Math.round((e - s)/1000);
+      else if(now >= s && now <= e) remSec += Math.round((e - now)/1000);
+    });
+    const el = document.getElementById(session + 'Remaining');
+    if(el) el.textContent = remSec > 0 ? formatHMS(remSec) : '0s';
+  });
+
+  const h = Math.floor(dayTotalMins/60), m = dayTotalMins % 60;
+  document.getElementById('totalDay').textContent = `Day total: ${h>0 ? h+' hr ' : ''}${m} mins`;
+}
+
+/* beep sound */
+let beepAudio = null;
+function initBeep(){
+  // small beep via WebAudio for lightweight beep (no external assets)
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = 880;
+    o.connect(g);
+    g.connect(ctx.destination);
+    g.gain.value = 0;
+    o.start();
+    beepAudio = { ctx, o, g };
+  }catch(e){ beepAudio = null; }
+}
+function playBeep(){
+  if(!beepAudio) return;
+  const { ctx, g } = beepAudio;
+  const now = ctx.currentTime;
+  g.gain.cancelScheduledValues(now);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.2, now + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+}
+
+/* ---------------- load/save on init ---------------- */
+loadSchedule();
+initBeep();
+updateAllTimers();
+setInterval(updateAllTimers, 1000);
+window.addEventListener('beforeunload', saveSchedule);
+
+/* ---------------- load saved prefs & schedule already done earlier ---------------- */
+loadPrefs();
+
+/* ---------------- keyboard/escape to close editor ---------------- */
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ closeEditor(); } });
+
+/* ---------------- auto-jump to current on load ---------------- */
+(function autoJump(){
+  const now = new Date();
+  const items = Array.from(document.querySelectorAll('.item'));
+  const current = items.find(it=>{
+    const s = parseTimeToDate12(it.dataset.start), e = parseTimeToDate12(it.dataset.end);
+    return s && e && now >= s && now <= e;
+  });
+  if(current){
+    const panel = current.closest('.tabpanel');
+    if(panel){
+      const id = panel.id;
+      const tabBtn = document.querySelector(`[data-target="${id}"]`);
+      if(tabBtn) selectTab(tabBtn);
+      current.classList.add('open');
+    }
+  }
+})();
+
+/* ---------------- show/hide remaining on init ---------------- */
+document.querySelectorAll('.remaining-txt').forEach(r=> r.style.display = showRemainingToggle.checked ? 'block' : 'none');
+
+</script>
+</body>
+</html>

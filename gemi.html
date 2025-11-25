@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Structured Interactive Schedule</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.4);
+    --bg-page: #f0f4f8;
+    --card-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --radius: 16px;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --success: #10b981;
+    --warning: #f59e0b;
+    --purple: #8b5cf6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 20px;
+    background-color: var(--bg-page);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 900px;
+    animation: fadeIn 0.6s ease-out;
+  }
+
+  /* --- Header Updates --- */
+  header {
+    margin-bottom: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+
+  h1 {
+    font-size: 3rem;
+    font-weight: 900;
+    margin: 0;
+    color: #0f172a;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  .tagline {
+    font-weight: 900;
+    color: #000000;
+    margin-top: 4px;
+    font-size: 1.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    text-transform: uppercase;
+    letter-spacing: -0.02em;
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    background: white;
+    padding: 8px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    margin-top: 10px;
+  }
+
+  button.btn {
+    border: none;
+    background: transparent;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  button.btn:hover { background: #f1f5f9; color: var(--text-main); }
+  
+  button.btn.primary {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 12px var(--accent-glow);
+  }
+  button.btn.primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px var(--accent-glow);
+  }
+
+  /* --- Card Container --- */
+  .main-card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* --- Tabs --- */
+  .tabs {
+    display: flex;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 6px 6px 0 6px;
+    gap: 6px;
+  }
+
+  .tabs button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 16px;
+    font-weight: 800;
+    color: var(--text-muted);
+    cursor: pointer;
+    position: relative;
+    border-radius: 10px 10px 0 0;
+    transition: color 0.3s;
+    font-size: 1rem;
+  }
+
+  .tabs button:hover { background: rgba(0,0,0,0.02); color: var(--text-main); }
+
+  .tabs button[aria-selected="true"] {
+    color: var(--accent);
+    background: white;
+    box-shadow: 0 -4px 6px -4px rgba(0,0,0,0.05);
+  }
+  
+  .tabs button::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; width: 100%; height: 3px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+  }
+  .tabs button[aria-selected="true"]::after { transform: scaleX(1); }
+
+  /* --- Session Headers --- */
+  .tabpanel { display: none; padding: 24px; animation: slideUp 0.3s ease-out; }
+  .tabpanel.active { display: block; }
+
+  .session-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center; /* Vertically center items */
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 2px dashed #e2e8f0;
+    gap: 20px;
+  }
+  
+  .session-badge {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .session-badge-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.3rem;
+    font-weight: 800;
+  }
+  .session-meta { font-size: 0.95rem; color: var(--text-muted); padding-left: 20px; }
+  
+  .dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 4px rgba(0,0,0,0.05); }
+
+  /* --- MASSIVE TIMER DESIGN --- */
+  .session-timer {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    padding: 12px 24px;
+    border-radius: 16px;
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  }
+  
+  /* The Time Digits - HUGE and ALERT */
+  .session-timer div {
+    font-size: 3.5rem; /* Massive size */
+    font-weight: 900;  /* Extra heavy weight */
+    line-height: 0.9;
+    color: var(--accent); 
+    font-variant-numeric: tabular-nums; /* Monospace numbers */
+    letter-spacing: -0.04em;
+    margin-bottom: 4px;
+    text-shadow: 2px 2px 0px rgba(59, 130, 246, 0.1); /* Subtle depth */
+  }
+  
+  /* The Label */
+  .session-timer span { 
+    display: block; 
+    font-size: 0.75rem; 
+    font-weight: 700; 
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* --- Schedule Items --- */
+  .schedule-list { display: flex; flex-direction: column; gap: 14px; }
+
+  .item {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 18px;
+    display: grid;
+    grid-template-columns: 140px 1fr auto; 
+    gap: 16px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: #cbd5e1;
+  }
+
+  .item.past { opacity: 0.6; background: #fafafa; }
+  
+  .item.current {
+    border-color: var(--accent);
+    background: linear-gradient(to right, #eff6ff, white);
+    box-shadow: 0 0 0 1px var(--accent), var(--shadow-md);
+  }
+  .item.current::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 5px;
+    background: var(--accent);
+  }
+  .item.current .time-col { color: var(--accent); }
+
+  /* --- Time Column --- */
+  .time-col {
+    font-weight: 800;
+    color: #334155;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .time-col span:first-child {
+    font-size: 1.5rem; 
+    letter-spacing: -0.05em;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .time-col span:last-child {
+    font-size: 0.9rem;
+    font-weight: 600;
+    opacity: 0.6;
+  }
+  
+  .content-col { display: flex; flex-direction: column; justify-content: center; }
+  
+  .task-title { font-weight: 800; font-size: 1.1rem; margin-bottom: 6px; color: #0f172a; }
+  
+  .meta-row {
+    display: flex;
+    gap: 12px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    align-items: center;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 10px;
+    position: relative;
+  }
+  
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 10px;
+    transition: width 1s linear;
+    background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent);
+    background-size: 1rem 1rem;
+    animation: moveStripes 1s linear infinite;
+  }
+
+  .toggle-btn {
+    background: #f1f5f9;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: background 0.2s, transform 0.3s;
+    align-self: center;
+  }
+  .toggle-btn:hover { background: #e2e8f0; color: var(--text-main); }
+  .item.open .toggle-btn { transform: rotate(180deg); background: var(--accent); color: white; }
+
+  .detail-wrapper {
+    grid-column: 1 / -1;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0, 1, 0, 1), opacity 0.3s ease;
+    opacity: 0;
+  }
+  
+  .item.open .detail-wrapper {
+    max-height: 500px;
+    opacity: 1;
+    margin-top: 12px;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 12px;
+  }
+
+  .detail-content {
+    font-size: 1rem;
+    color: #475569;
+    line-height: 1.6;
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 8px;
+  }
+
+  .footer-status {
+    padding: 14px 24px;
+    background: #f8fafc;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    border-top: 1px solid #e2e8f0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  @keyframes moveStripes { from { background-position: 1rem 0; } to { background-position: 0 0; } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 600px) {
+    .session-header { flex-direction: column; align-items: center; text-align: center; }
+    .session-meta { padding-left: 0; }
+    .session-timer { align-self: stretch; align-items: center; }
+    .item { grid-template-columns: 1fr auto; gap: 10px; }
+    .time-col { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom:8px; border-bottom:1px solid #f1f5f9; }
+    .time-col span:first-child { font-size: 1.2rem; margin-bottom: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1>Structured  Schedule</h1>
+    <div class="tagline">⚡️ Dec 31 make it counts ⚡️</div>
+    
+    <div class="controls">
+      <button class="btn" id="expandAll">Expand All</button>
+      <button class="btn" id="collapseAll">Collapse All</button>
+      <button class="btn primary" id="nowBtn">Jump to Now</button>
+    </div>
+  </header>
+
+  <div class="main-card">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-target="morning">Morning</button>
+      <button role="tab" aria-selected="false" data-target="afternoon">Afternoon</button>
+      <button role="tab" aria-selected="false" data-target="evening">Evening</button>
+    </div>
+
+    <div id="morning" class="tabpanel active">
+      <div class="session-header">
+        <div class="session-badge">
+          <div class="session-badge-title">
+            <div class="dot" style="background:var(--success)"></div>
+            <span>Morning — Deep Technical Dive</span>
+          </div>
+          <div class="session-meta">Focus: concentrated technical practice & sessions</div>
+        </div>
+        <div class="session-timer">
+          <div id="morningRemaining">--:--</div>
+          <span>Session Remaining</span>
+        </div>
+      </div>
+
+      <div class="schedule-list">
+        <div class="item" data-start="08:30 AM" data-end="08:45 AM">
+          <div class="time-col">
+            <span>08:30 AM</span>
+            <span>08:45 AM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">🥣 Breakfast / Start</div>
+            <div class="meta-row">
+              <span>Duration: 15 mins</span>
+              <span class="status-text">Pending</span>
+            </div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn" aria-label="Toggle details">
+            <svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg>
+          </button>
+          <div class="detail-wrapper">
+            <div class="detail-content">Light breakfast, set up environment, quick review of goals.</div>
+          </div>
+        </div>
+
+        <div class="item" data-start="08:45 AM" data-end="11:00 AM">
+          <div class="time-col">
+            <span>08:45 AM</span>
+            <span>11:00 AM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">🏋️‍♂️ Technical Workouts (Part 1)</div>
+            <div class="meta-row">
+              <span>Duration: 2 hrs 15 mins</span>
+              <span class="status-text">Pending</span>
+            </div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper">
+            <div class="detail-content">Deep practice: systems, algorithms, problem breakdowns.</div>
+          </div>
+        </div>
+
+        <div class="item" data-start="11:00 AM" data-end="11:15 AM">
+          <div class="time-col">
+            <span>11:00 AM</span>
+            <span>11:15 AM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">☕ Morning Tea Break</div>
+            <div class="meta-row"><span>Duration: 15 mins</span><span class="status-text">Pending</span></div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Short reset: walk/stretch, hydrate.</div></div>
+        </div>
+
+        <div class="item" data-start="11:15 AM" data-end="01:00 PM">
+          <div class="time-col">
+            <span>11:15 AM</span>
+            <span>01:00 PM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">🏋️‍♂️ Technical Workouts (Part 2)</div>
+            <div class="meta-row"><span>Duration: 1 hr 45 mins</span><span class="status-text">Pending</span></div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Continue targeted practice and problem solving.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="afternoon" class="tabpanel">
+      <div class="session-header">
+        <div class="session-badge">
+          <div class="session-badge-title">
+            <div class="dot" style="background:var(--warning)"></div>
+            <span>Afternoon — Communication & Projects</span>
+          </div>
+          <div class="session-meta">Focus: collaboration, projects, analytics</div>
+        </div>
+        <div class="session-timer">
+          <div id="afternoonRemaining">--:--</div>
+          <span>Session Remaining</span>
+        </div>
+      </div>
+      <div class="schedule-list">
+        <div class="item" data-start="01:00 PM" data-end="02:00 PM">
+          <div class="time-col">
+             <span>01:00 PM</span>
+             <span>02:00 PM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">🍛 Lunch Break</div>
+            <div class="meta-row"><span>Duration: 1 hr</span><span class="status-text">Pending</span></div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Take a full break, step away from the screen.</div></div>
+        </div>
+
+        <div class="item" data-start="02:00 PM" data-end="03:00 PM">
+          <div class="time-col">
+             <span>02:00 PM</span>
+             <span>03:00 PM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">🗣️ Communication Session (Fixed)</div>
+            <div class="meta-row"><span>Duration: 1 hr</span><span class="status-text">Pending</span></div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Meetings, call sessions, updates.</div></div>
+        </div>
+
+        <div class="item" data-start="03:00 PM" data-end="05:00 PM">
+          <div class="time-col">
+             <span>03:00 PM</span>
+             <span>05:00 PM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">💻 Project & Data Analytics Revision</div>
+            <div class="meta-row"><span>Duration: 2 hrs</span><span class="status-text">Pending</span></div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Hands-on project work, data checks, reports.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="evening" class="tabpanel">
+      <div class="session-header">
+        <div class="session-badge">
+          <div class="session-badge-title">
+            <div class="dot" style="background:var(--purple)"></div>
+            <span>Evening — Skills, Logic & Review</span>
+          </div>
+          <div class="session-meta">Focus: practice, extra skills, revision</div>
+        </div>
+        <div class="session-timer">
+          <div id="eveningRemaining">--:--</div>
+          <span>Session Remaining</span>
+        </div>
+      </div>
+      <div class="schedule-list">
+        <div class="item" data-start="05:00 PM" data-end="05:15 PM">
+          <div class="time-col">
+             <span>05:00 PM</span>
+             <span>05:15 PM</span>
+          </div>
+          <div class="content-col">
+             <div class="task-title">☕ Evening Tea Break</div>
+             <div class="meta-row"><span>Duration: 15 mins</span><span class="status-text">Pending</span></div>
+             <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+           <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Quick reset, short walk.</div></div>
+        </div>
+
+        <div class="item" data-start="05:15 PM" data-end="07:00 PM">
+          <div class="time-col">
+             <span>05:15 PM</span>
+             <span>07:00 PM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">🏋️‍♂️ Technical Workouts (Part 3)</div>
+            <div class="meta-row"><span>Duration: 1 hr 45 mins</span><span class="status-text">Pending</span></div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Focused problem-solving, practice rounds.</div></div>
+        </div>
+
+        <div class="item" data-start="07:00 PM" data-end="08:00 PM">
+          <div class="time-col">
+             <span>07:00 PM</span>
+             <span>08:00 PM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">🐍 Python, DSA & LeetCode</div>
+            <div class="meta-row"><span>Duration: 1 hr</span><span class="status-text">Pending</span></div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Targeted coding practice—one problem deep.</div></div>
+        </div>
+
+        <div class="item" data-start="08:00 PM" data-end="08:30 PM">
+          <div class="time-col">
+             <span>08:00 PM</span>
+             <span>08:30 PM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">🤖 Miscellaneous</div>
+             <div class="meta-row"><span>Duration: 30 mins</span><span class="status-text">Pending</span></div>
+             <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Catch-all for small tasks, quick admin.</div></div>
+        </div>
+        
+        <div class="item" data-start="08:30 PM" data-end="09:15 PM">
+          <div class="time-col">
+             <span>08:30 PM</span>
+             <span>09:15 PM</span>
+          </div>
+          <div class="content-col">
+            <div class="task-title">📊 Extra Skills (Excel/Tools)</div>
+             <div class="meta-row"><span>Duration: 45 mins</span><span class="status-text">Pending</span></div>
+             <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Tool practice — Excel dashboards, shortcuts, macros.</div></div>
+        </div>
+
+        <div class="item" data-start="09:15 PM" data-end="10:00 PM">
+           <div class="time-col">
+              <span>09:15 PM</span>
+              <span>10:00 PM</span>
+           </div>
+          <div class="content-col">
+            <div class="task-title">🔄 Dedicated Revision (Week 1 - Week 25)</div>
+            <div class="meta-row"><span>Duration: 45 mins</span><span class="status-text">Pending</span></div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <button class="toggle-btn"><svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1L6 6L11 1"/></svg></button>
+          <div class="detail-wrapper"><div class="detail-content">Revision cycle, spaced repetition for long-term retention.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-status">
+      <span id="totalDay">Day total: --</span>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Utility */
+function parseTime(str) {
+  const parts = str.trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if(!parts) return null;
+  let hh = parseInt(parts[1], 10);
+  const mm = parseInt(parts[2], 10);
+  const ap = parts[3].toUpperCase();
+  if(ap === 'AM' && hh === 12) hh = 0;
+  if(ap === 'PM' && hh !== 12) hh += 12;
+  const d = new Date();
+  d.setHours(hh, mm, 0, 0);
+  return d;
+}
+
+function formatHMS(sec) {
+  if (sec < 0) sec = 0;
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  const s = Math.floor(sec%60);
+  if(h>0) return `${h}h ${m}m ${s}s`;
+  if(m>0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+/* Tabs */
+const tabs = document.querySelectorAll('[role="tab"]');
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.setAttribute('aria-selected', 'false'));
+    tab.setAttribute('aria-selected', 'true');
+    document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+    document.getElementById(tab.dataset.target).classList.add('active');
+  });
+});
+
+/* Toggle Details */
+document.querySelectorAll('.toggle-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const item = btn.closest('.item');
+    item.classList.toggle('open');
+  });
+});
+document.querySelectorAll('.item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    if(e.target.closest('.toggle-btn')) return; 
+    item.classList.toggle('open');
+  });
+});
+
+/* Logic Engine */
+function updateTimers() {
+  const now = new Date();
+  let dayTotalMins = 0;
+
+  document.querySelectorAll('.item').forEach(item => {
+    const start = parseTime(item.dataset.start);
+    const end = parseTime(item.dataset.end);
+    if (!start || !end) return;
+
+    // Calc total mins for footer
+    dayTotalMins += Math.max(0, Math.round((end - start) / 60000));
+
+    const totalSec = Math.max(0, Math.round((end - start) / 1000));
+    const elapsedSec = Math.round((now - start) / 1000);
+    
+    // Status Logic
+    item.classList.remove('past', 'current', 'future');
+    const statusTxt = item.querySelector('.status-text');
+    const bar = item.querySelector('.progress-fill');
+
+    if (now > end) {
+      item.classList.add('past');
+      if(statusTxt) statusTxt.textContent = "Done";
+      if(statusTxt) statusTxt.style.color = "var(--text-muted)";
+      if(bar) bar.style.width = '100%';
+      if(bar) bar.style.background = '#cbd5e1'; 
+    } else if (now < start) {
+      item.classList.add('future');
+      const diff = Math.round((start - now)/60000);
+      if(statusTxt) statusTxt.textContent = (diff > 60) ? `in ${Math.round(diff/60)}h ${diff%60}m` : `in ${diff}m`;
+      if(statusTxt) statusTxt.style.color = "var(--accent)";
+      if(bar) bar.style.width = '0%';
+    } else {
+      item.classList.add('current');
+      if(statusTxt) statusTxt.textContent = "Active";
+      if(statusTxt) statusTxt.style.color = "var(--success)";
+      
+      const pct = Math.max(0, Math.min(100, (elapsedSec / totalSec) * 100));
+      if(bar) {
+        bar.style.width = `${pct}%`;
+        bar.style.background = 'var(--accent)'; 
+      }
+    }
+  });
+
+  // Session Remaining Timers
+  ['morning', 'afternoon', 'evening'].forEach(id => {
+    let remSec = 0;
+    const items = document.querySelectorAll(`#${id} .item`);
+    items.forEach(it => {
+      const s = parseTime(it.dataset.start);
+      const e = parseTime(it.dataset.end);
+      if(!s || !e) return;
+      if(now < s) remSec += (e - s)/1000;
+      else if(now >= s && now <= e) remSec += (e - now)/1000;
+    });
+    const el = document.getElementById(id + 'Remaining');
+    if(el) el.textContent = remSec > 0 ? formatHMS(Math.round(remSec)) : '0s';
+  });
+  
+  const h = Math.floor(dayTotalMins/60), m = dayTotalMins % 60;
+  document.getElementById('totalDay').textContent = `Day total: ${h} hr ${m} mins`;
+}
+
+// Controls
+document.getElementById('expandAll').addEventListener('click', () => {
+  document.querySelectorAll('.item').forEach(i => i.classList.add('open'));
+});
+document.getElementById('collapseAll').addEventListener('click', () => {
+  document.querySelectorAll('.item').forEach(i => i.classList.remove('open'));
+});
+document.getElementById('nowBtn').addEventListener('click', () => {
+  const current = document.querySelector('.item.current');
+  if(current) {
+    const tabId = current.closest('.tabpanel').id;
+    document.querySelector(`[data-target="${tabId}"]`).click();
+    current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    current.classList.add('open');
+  } else {
+    alert("No active slot right now (check your system time).");
+  }
+});
+
+// Init
+setInterval(updateTimers, 1000);
+updateTimers();
+
+// Auto-jump logic
+setTimeout(() => {
+  const cur = document.querySelector('.item.current');
+  if(cur) {
+     const tabId = cur.closest('.tabpanel').id;
+     document.querySelector(`[data-target="${tabId}"]`).click();
+  }
+}, 500);
+
+</script>
+</body>
+</html>
